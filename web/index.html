@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080d17">
+  <title>Gauntlet — Prompt Injection Lab</title>
+  <link rel="stylesheet" href="/styles.css?v=3">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Main navigation">
+      <a class="brand" href="#top" aria-label="Gauntlet home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>gauntlet<span class="brand-dot">.</span></span>
+      </a>
+      <div class="workspace-label">WORKSPACE</div>
+      <a class="nav-item active" href="#comparison"><span class="nav-icon">◈</span> Attack lab <span class="nav-count">01</span></a>
+      <a class="nav-item muted" href="#trace"><span class="nav-icon">⌁</span> Event traces</a>
+      <div class="sidebar-bottom">
+        <div class="local-card"><span class="pulse-dot"></span><div><strong>Local sandbox</strong><small>No external calls</small></div></div>
+        <div class="sidebar-version">GAUNTLET · PROTOTYPE</div>
+      </div>
+    </aside>
+
+    <main id="top" class="main-content">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Security lab</span><span class="crumb-sep">/</span><strong>Prompt injection</strong></div>
+        <div class="topbar-status"><span class="pulse-dot"></span> Simulation mode <span class="topbar-divider"></span><span class="avatar">G</span></div>
+      </header>
+
+      <section class="intro">
+        <div class="eyebrow"><span class="eyebrow-line"></span> ADVERSARIAL TESTING <span class="eyebrow-line"></span></div>
+        <h1>Prompt injection,<br><span>put to the test.</span></h1>
+        <p class="intro-copy">See how an untrusted instruction can steer an unguarded agent—and how a least-privilege tool allowlist changes the outcome.</p>
+        <div class="intro-actions">
+          <button id="run-button" class="run-button" type="button"><span class="play-icon">▶</span><span id="button-label">Run Attack Simulation</span><span class="button-arrow">↗</span></button>
+          <div class="action-note"><span class="lock-icon">▣</span> Local simulation · harmless dummy data</div>
+        </div>
+      </section>
+
+      <section class="scenario-section" id="comparison" aria-labelledby="comparison-title">
+        <div class="section-heading">
+          <div><div class="section-kicker">SIDE-BY-SIDE ANALYSIS</div><h2 id="comparison-title">One attack. Two outcomes.</h2></div>
+          <div class="sim-badge"><span>●</span> SIMULATED RESULTS</div>
+        </div>
+        <div id="error-banner" class="error-banner" role="alert" hidden></div>
+        <div class="scenario-grid">
+          <article class="scenario-card unguarded-card" aria-labelledby="unguarded-title">
+            <div class="card-topline"><div class="scenario-index"><span class="scenario-number">SCENARIO 01</span><span class="scenario-mode">SIMULATED</span></div><span class="status-pill status-danger"><i></i><span>VULNERABLE</span></span></div>
+            <div class="scenario-title-row"><div class="scenario-symbol danger-symbol">!</div><div><h3 id="unguarded-title">Unguarded agent</h3><p class="scenario-subtitle">No tool-level restrictions</p></div></div>
+            <div class="scenario-body">
+              <div class="field-block"><div class="field-label"><span class="field-icon attack-icon" aria-hidden="true">↯</span><span class="field-label-text">ATTACK INSTRUCTION</span></div><div class="attack-box" data-field="attack">Waiting for simulation…</div></div>
+              <div class="field-block"><div class="field-label"><span class="field-icon" aria-hidden="true">⌘</span><span class="field-label-text">ATTEMPTED TOOL CALL</span></div><div class="code-box" data-field="attempted_tool_call">—</div></div>
+              <div class="result-row"><div class="result-cell"><div class="field-label">SIMULATED AUTHORIZATION</div><div class="decision-value" data-field="authorization_outcome">—</div></div><div class="result-cell"><div class="field-label">EXECUTION STATUS</div><div class="execution-value danger-text" data-field="execution_status">—</div></div></div>
+              <div class="output-box" data-field="output" hidden></div>
+              <div class="trace-block" id="trace"><div class="trace-heading"><h4 class="trace-title">EVENT TRACE</h4><span class="trace-count" data-trace-count>0 EVENTS</span></div><ol class="event-list" data-field="event_trace"><li class="trace-empty">Run the simulation to inspect events.</li></ol></div>
+            </div>
+            <div class="card-footer danger-footer"><span class="footer-icon">↗</span><span>Injected instruction reaches a local no-op publisher simulation.</span></div>
+          </article>
+
+          <article class="scenario-card governed-card" aria-labelledby="governed-title">
+            <div class="card-topline"><div class="scenario-index"><span class="scenario-number">SCENARIO 02</span><span class="scenario-mode">SIMULATED</span></div><span class="status-pill status-safe"><i></i><span>CAPABILITY LIMITED</span></span></div>
+            <div class="scenario-title-row"><div class="scenario-symbol safe-symbol">✓</div><div><h3 id="governed-title">Least-privilege agent</h3><p class="scenario-subtitle">Research tool only · simulated allowlist</p></div></div>
+            <div class="permission-strip" aria-label="Simulated registered tools"><span class="permission-lock" aria-hidden="true">LOCK</span><span class="permission-label">REGISTERED TOOLS</span><div class="tool-list"><span class="tool-badge tool-available"><code>research</code><span>available</span></span><span class="blocked-tool"><code>publish_report</code><span>unavailable - not registered</span></span></div></div>
+            <div class="scenario-body">
+              <div class="field-block"><div class="field-label"><span class="field-icon attack-icon" aria-hidden="true">↯</span><span class="field-label-text">ATTACK INSTRUCTION</span></div><div class="attack-box" data-field="attack">Waiting for simulation…</div></div>
+              <div class="field-block"><div class="field-label"><span class="field-icon" aria-hidden="true">⌘</span><span class="field-label-text">ATTEMPTED TOOL CALL</span></div><div class="code-box" data-field="attempted_tool_call">—</div></div>
+              <div class="result-row"><div class="result-cell"><div class="field-label">SIMULATED TOOL AVAILABILITY</div><div class="decision-value" data-field="authorization_outcome">—</div></div><div class="result-cell"><div class="field-label">EXECUTION STATUS</div><div class="execution-value safe-text" data-field="execution_status">—</div></div></div>
+              <div class="output-box" data-field="output" hidden></div>
+              <div class="trace-block"><div class="trace-heading"><h4 class="trace-title">EVENT TRACE</h4><span class="trace-count" data-trace-count>0 EVENTS</span></div><ol class="event-list" data-field="event_trace"><li class="trace-empty">Run the simulation to inspect events.</li></ol></div>
+            </div>
+            <div class="card-footer safe-footer"><span class="footer-icon">✓</span><span>Publisher is not registered, so the attempted tool is unavailable.</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="integrity-note"><span class="note-icon">ⓘ</span><div><strong>Simulation, not enforcement.</strong><span> Decisions shown here are generated by local demo logic. This dashboard does not call ArmorIQ, and it does not demonstrate real ArmorIQ policy enforcement.</span></div><span class="note-tag">NO NETWORK</span></section>
+      <footer class="page-footer"><span>GAUNTLET PROMPT-INJECTION LAB</span><span>Built for controlled, local demonstration</span></footer>
+    </main>
+  </div>
+</body>
+</html>
