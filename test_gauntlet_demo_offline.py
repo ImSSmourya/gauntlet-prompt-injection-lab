@@ -171,18 +171,18 @@ class GauntletDispatcherOfflineTests(unittest.TestCase):
 
         self.assertIn("SIMULATION ONLY", governed.name)
         self.assertEqual(governed.authorization_outcome.split()[0], "SIMULATED")
-        self.assertIn("BLOCK", governed.authorization_outcome)
-        self.assertIn("unavailable", governed.authorization_outcome)
+        self.assertIn("PERMISSION_DENIED", governed.authorization_outcome)
+        self.assertIn("outside the read_only profile", governed.authorization_outcome)
         self.assertEqual(governed.execution_status, "NOT EXECUTED")
         self.assertIsNone(governed.output)
-        self.assertIn("publish_report is not registered", " ".join(governed.event_trace))
-        self.assertIn("unavailable to this agent", " ".join(governed.event_trace))
+        self.assertIn("Tool authorization: PERMISSION_DENIED", " ".join(governed.event_trace))
+        self.assertIn("outside the read_only profile", " ".join(governed.event_trace))
         research.assert_called_once()
         # The only publisher call belongs to the unguarded local no-op scenario.
         publisher.assert_called_once_with(
             content="Dummy research finding: the echo tool returns its input unchanged."
         )
-        self.assertIn("EXECUTED locally", " ".join(governed.event_trace))
+        self.assertIn("NOT EXECUTED", " ".join(governed.event_trace))
 
         # The unguarded path is an isolated simulation with a no-op publisher.
         self.assertIn("SIMULATION ONLY", unguarded.name)

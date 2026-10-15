@@ -1,87 +1,96 @@
-"""Offline tests for the local web adapter; no server or network is used."""
+"""Offline tests for the local web adapter; no network is used."""
 
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
+from gauntlet_demo import (
+    build_governed_tool_registry,
+    dispatch_registered_tool,
+    permission_profile_tools,
+)
 from gauntlet_web import build_simulation_payload
 
 WEB_ROOT = Path(__file__).with_name("web")
 
 
 class GauntletWebAdapterOfflineTests(unittest.TestCase):
-    def test_payload_contains_both_labeled_simulations(self):
-        payload = build_simulation_payload()
-
+    def test_payload_contains_simulated_profile_and_two_scenarios(self):
+        payload = build_simulation_payload("read_only")
         self.assertIs(payload["simulation_only"], True)
         self.assertIs(payload["armorIQ_enforcement"], False)
+        self.assertEqual(payload["profile"], "read_only")
         self.assertEqual(len(payload["scenarios"]), 2)
-        unguarded, governed = payload["scenarios"]
-        self.assertIn("SIMULATION ONLY", unguarded["name"])
-        self.assertIn("SIMULATION ONLY", governed["name"])
-        self.assertIn("publish_report", governed["attempted_tool_call"])
+        self.assertIn("publish_report", payload["scenarios"][1]["attempted_tool_call"])
 
-    def test_governed_payload_reports_unavailable_tool_not_policy_denial(self):
-        governed = build_simulation_payload()["scenarios"][1]
+    def test_profiles_have_distinct_tool_grants(self):
+        self.assertEqual(permission_profile_tools("read_only"), {"research"})
+        self.assertEqual(permission_profile_tools("limited_access"), {"research", "gauntlet__echo"})
+        self.assertIn("publish_report", permission_profile_tools("admin_simulation"))
 
-        self.assertIn("SIMULATED BLOCK", governed["authorization_outcome"])
-        self.assertIn("unavailable", governed["authorization_outcome"])
-        self.assertEqual(governed["execution_status"], "NOT EXECUTED")
-        self.assertIsNone(governed["output"])
-        self.assertTrue(any("publish_report is not registered" in event for event in governed["event_trace"]))
+    def test_advertised_profile_capabilities_match_dispatch_allowlists(self):
+        advertised = build_simulation_payload()["profiles"]
+        for profile, capabilities in advertised.items():
+            self.assertEqual(set(capabilities), permission_profile_tools(profile))
 
-    def test_permission_strip_has_dark_theme_styles(self):
-        styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+    def test_echo_is_registered_and_invocable_only_for_permitted_profiles(self):
+        registry = build_governed_tool_registry(lambda query: "dummy research")
+        self.assertIn("gauntlet__echo", registry)
+        echo = Mock(return_value="echoed")
+        registry["gauntlet__echo"] = echo
+        allowed = object()
+        # Admin and limited access both advertise and permit the registered echo tool.
+        for profile in ("limited_access", "admin_simulation"):
+            result = dispatch_registered_tool(
+                "gauntlet__echo", {"message": "hello"},
+                type("Decision", (), {"allowed": True})(), registry,
+                permission_profile=profile,
+            )
+            self.assertEqual(result.status, "executed")
+        self.assertEqual(echo.call_count, 2)
+        denied = dispatch_registered_tool(
+            "gauntlet__echo", {"message": "hello"}, allowed, registry,
+            permission_profile="read_only",
+        )
+        self.assertEqual(denied.status, "permission_denied")
+        self.assertEqual(echo.call_args_list, [
+            unittest.mock.call(message="hello"),
+            unittest.mock.call(message="hello"),
+        ])
 
-        for selector in (
-            ".permission-strip{",
-            ".permission-lock{",
-            ".permission-separator{",
-            ".blocked-tool{",
-        ):
-            self.assertIn(selector, styles)
-        self.assertIn("background:", styles[styles.index(".permission-strip{"):])
-        self.assertIn("border:", styles[styles.index(".blocked-tool{"):])
+    def test_backend_dispatcher_denies_tool_before_call_for_limited_profile(self):
+        publisher = Mock(return_value="published")
+        result = dispatch_registered_tool(
+            "publish_report", {"content": "dummy"}, object(), {"publish_report": publisher},
+            permission_profile="limited_access",
+        )
+        self.assertEqual(result.status, "permission_denied")
+        self.assertFalse(result.executed)
+        publisher.assert_not_called()
 
-    def test_dashboard_labels_capability_unavailability_as_simulation(self):
+    def test_admin_profile_runs_only_the_local_publisher_stub(self):
+        scenario = build_simulation_payload("admin_simulation")["scenarios"][1]
+        self.assertTrue(scenario["execution_status"].startswith("EXECUTED locally"))
+        self.assertIn("SIMULATED ONLY", scenario["output"])
+
+    def test_unknown_profile_is_rejected(self):
+        with self.assertRaises(ValueError):
+            build_simulation_payload("superuser")
+        with self.assertRaises(ValueError):
+            permission_profile_tools([])
+
+    def test_dashboard_uses_palette_and_accessible_collapsible_traces(self):
         page = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
-
-        self.assertIn('class="scenario-number">SCENARIO 01</span><span class="scenario-mode">SIMULATED', page)
-        self.assertIn('class="scenario-number">SCENARIO 02</span><span class="scenario-mode">SIMULATED', page)
-        self.assertIn("SIMULATED TOOL AVAILABILITY", page)
-        self.assertIn('<div class="tool-list"><span class="tool-badge tool-available"><code>research</code>', page)
-        self.assertIn("publish_report</code><span>unavailable - not registered</span>", page)
-        self.assertIn("<h4 class=\"trace-title\">EVENT TRACE</h4>", page)
-        self.assertIn('href="/styles.css?v=3"', page)
-        self.assertIn('<span class="field-label-text">ATTACK INSTRUCTION</span>', page)
-        self.assertIn("Simulation, not enforcement.", page)
-        self.assertNotIn("Publishing is denied", page)
-
-    def test_dashboard_styles_wrap_scenario_tools_and_traces_at_narrow_widths(self):
         styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
-
-        self.assertIn(".card-topline{height:auto;", styles)
-        self.assertIn(".card-topline{display:grid;grid-template-columns:minmax(0,1fr) auto;", styles)
-        self.assertIn(".scenario-index{min-width:0;display:flex;", styles)
-        self.assertIn(".permission-strip{display:grid;grid-template-columns:auto auto minmax(0,1fr);", styles)
-        self.assertIn(".tool-list{grid-column:1/-1;", styles)
-        self.assertIn(".tool-badge{min-width:0;display:inline-flex;", styles)
-        self.assertIn(".event-list li{min-width:0;", styles)
-        self.assertIn(".trace-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;", styles)
-        self.assertIn("@media(max-width:760px){.card-topline{", styles)
-        self.assertIn("@media(max-width:430px){.card-topline{", styles)
-
-    def test_frontend_clears_old_results_before_running_and_after_failure(self):
         script = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
-        run_start = script.index("async function runSimulation()")
-        fetch_start = script.index('fetch("/api/simulate"', run_start)
-        loading_clear = script.index('clearScenarioResults("Running local simulation…")', run_start)
-        catch_start = script.index("} catch (error) {", fetch_start)
-        failure_clear = script.index('clearScenarioResults("No result: this simulation run failed.")', catch_start)
-
-        self.assertLess(loading_clear, fetch_start)
-        self.assertLess(catch_start, failure_clear)
-        self.assertIn('dashboard.classList.add("is-loading")', script)
-        self.assertIn('dashboard.classList.remove("is-loading")', script)
+        for profile in ("Read-only", "Limited Access", "Admin Simulation"):
+            self.assertIn(profile, page)
+        for color in ("#CCC9A1", "#F0FFCE", "#A53F2B", "#4C230A", "#280004"):
+            self.assertIn(color, styles)
+        self.assertIn('<details class="trace-details">', page)
+        self.assertIn('aria-live="polite"', page)
+        self.assertIn('method: "POST"', script)
+        self.assertIn("permission_profile", (Path(__file__).with_name("gauntlet_demo.py")).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

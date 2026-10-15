@@ -2,108 +2,78 @@
 
 const runButton = document.querySelector("#run-button");
 const buttonLabel = document.querySelector("#button-label");
+const profileSelect = document.querySelector("#profile-select");
 const errorBanner = document.querySelector("#error-banner");
 const dashboard = document.querySelector(".app-shell");
+const profileNames = {
+  read_only: "Read-only",
+  limited_access: "Limited Access",
+  admin_simulation: "Admin Simulation",
+};
+const descriptions = {
+  read_only: "Research only. Publishing is unavailable.",
+  limited_access: "Research and local echo. Publishing is unavailable.",
+  admin_simulation: "All simulated tools, including a local no-op publisher.",
+};
 
-function clearScenarioResults(message) {
-  for (const card of document.querySelectorAll(".scenario-card")) {
-    for (const name of [
-      "attack",
-      "attempted_tool_call",
-      "authorization_outcome",
-      "execution_status",
-    ]) {
-      const element = card.querySelector(`[data-field="${name}"]`);
-      if (element) element.textContent = "—";
-    }
-    const output = card.querySelector('[data-field="output"]');
-    output.textContent = "";
-    output.hidden = true;
+profileSelect.addEventListener("change", () => {
+  document.querySelector("#profile-description").textContent = descriptions[profileSelect.value];
+  document.querySelector("#summary-profile").textContent = profileNames[profileSelect.value];
+  document.querySelector("#summary-result").textContent = "Ready to run";
+});
 
-    const trace = card.querySelector('[data-field="event_trace"]');
-    const placeholder = document.createElement("li");
-    placeholder.className = "trace-empty";
-    placeholder.textContent = message;
-    trace.replaceChildren(placeholder);
-    card.querySelector("[data-trace-count]").textContent = "0 EVENTS";
-
-    card.querySelector('[data-field="authorization_outcome"]').classList.remove(
-      "danger-text",
-      "safe-text",
-    );
-    card.querySelector('[data-field="execution_status"]').classList.remove(
-      "danger-text",
-      "safe-text",
-    );
-  }
-}
-
-function renderScenario(card, scenario) {
-  const fields = [
-    "attack",
-    "attempted_tool_call",
-    "authorization_outcome",
-    "execution_status",
-  ];
-
-  for (const name of fields) {
-    const element = card.querySelector(`[data-field="${name}"]`);
-    if (element) element.textContent = scenario[name] ?? "—";
-  }
-
-  const output = card.querySelector('[data-field="output"]');
-  output.textContent = scenario.output || "";
-  output.hidden = !scenario.output;
-
-  const trace = card.querySelector('[data-field="event_trace"]');
-  trace.replaceChildren();
-  for (const event of scenario.event_trace || []) {
+function renderTrace(field, countName, events) {
+  const list = document.querySelector(`[data-field="${field}"]`);
+  list.replaceChildren();
+  for (const event of events || []) {
     const item = document.createElement("li");
     item.textContent = event;
-    trace.append(item);
+    list.append(item);
   }
-  card.querySelector("[data-trace-count]").textContent =
-    `${(scenario.event_trace || []).length} EVENTS`;
+  document.querySelector(`[data-trace-count="${countName}"]`).textContent = `${(events || []).length} events`;
+}
 
-  const authorization = card.querySelector('[data-field="authorization_outcome"]');
-  const execution = card.querySelector('[data-field="execution_status"]');
-  const governed = card.classList.contains("governed-card");
-  const ran = scenario.execution_status.startsWith("EXECUTED");
-  authorization.classList.toggle("danger-text", !governed);
-  authorization.classList.toggle("safe-text", governed);
-  execution.classList.toggle("danger-text", !governed && ran);
-  execution.classList.toggle("safe-text", governed && !ran);
+function render(payload) {
+  const [unguarded, governed] = payload.scenarios;
+  document.querySelector('[data-field="unguarded-auth"]').textContent = unguarded.authorization_outcome;
+  document.querySelector('[data-field="unguarded-status"]').textContent = unguarded.execution_status;
+  document.querySelector('[data-field="governed-auth"]').textContent = governed.authorization_outcome;
+  document.querySelector('[data-field="governed-status"]').textContent = governed.execution_status;
+  document.querySelector('[data-field="profile-status"]').textContent = profileNames[payload.profile].toUpperCase();
+  for (const [field, data] of [["unguarded-output", unguarded], ["governed-output", governed]]) {
+    const output = document.querySelector(`[data-field="${field}"]`);
+    output.textContent = data.output || "";
+    output.hidden = !data.output;
+  }
+  renderTrace("unguarded-trace", "unguarded", unguarded.event_trace);
+  renderTrace("governed-trace", "governed", governed.event_trace);
+  document.querySelector("#summary-profile").textContent = profileNames[payload.profile];
+  document.querySelector("#summary-result").textContent = governed.execution_status.startsWith("EXECUTED") ? "Publisher stub executed locally" : "Publish blocked by profile";
 }
 
 async function runSimulation() {
   runButton.disabled = true;
-  buttonLabel.textContent = "Running local simulation…";
+  buttonLabel.textContent = "Running…";
   errorBanner.hidden = true;
   dashboard.classList.add("is-loading");
-  clearScenarioResults("Running local simulation…");
-
+  document.querySelector("#summary-profile").textContent = profileNames[profileSelect.value];
+  document.querySelector("#summary-result").textContent = "Running simulation…";
   try {
     const response = await fetch("/api/simulate", {
-      method: "GET",
-      headers: { Accept: "application/json" },
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
       cache: "no-store",
+      body: JSON.stringify({ profile: profileSelect.value }),
     });
     if (!response.ok) throw new Error(`Local simulation returned HTTP ${response.status}.`);
     const payload = await response.json();
-    if (payload.simulation_only !== true || payload.armorIQ_enforcement !== false) {
-      throw new Error("Unexpected response: simulation status could not be verified.");
+    if (payload.simulation_only !== true || payload.armorIQ_enforcement !== false || payload.profile !== profileSelect.value || !Array.isArray(payload.scenarios) || payload.scenarios.length !== 2) {
+      throw new Error("Unexpected response: simulation status or profile could not be verified.");
     }
-    if (!Array.isArray(payload.scenarios) || payload.scenarios.length !== 2) {
-      throw new Error("Unexpected response: both local scenarios were not returned.");
-    }
-    const cards = document.querySelectorAll(".scenario-card");
-    if (cards.length !== 2) {
-      throw new Error("Unexpected dashboard state: both scenario panels are unavailable.");
-    }
-    payload.scenarios.forEach((scenario, index) => renderScenario(cards[index], scenario));
+    render(payload);
     buttonLabel.textContent = "Run Again";
   } catch (error) {
-    clearScenarioResults("No result: this simulation run failed.");
+    document.querySelector("#summary-result").textContent = "Simulation failed";
     errorBanner.textContent = `Could not run the local simulation: ${error.message}`;
     errorBanner.hidden = false;
     buttonLabel.textContent = "Retry Simulation";

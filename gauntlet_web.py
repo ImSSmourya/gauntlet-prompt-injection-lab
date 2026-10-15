@@ -10,18 +10,27 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from gauntlet_demo import run_prompt_injection_scenarios
+from gauntlet_demo import (
+    PERMISSION_PROFILES,
+    permission_profile_tools,
+    run_prompt_injection_scenarios,
+)
 
 
 WEB_ROOT = Path(__file__).with_name("web")
 
 
-def build_simulation_payload() -> dict[str, Any]:
+def build_simulation_payload(profile: str = "read_only") -> dict[str, Any]:
     """Return JSON-ready data from the existing local simulation logic."""
-    scenarios = run_prompt_injection_scenarios()
+    scenarios = run_prompt_injection_scenarios(permission_profile=profile)
     return {
         "simulation_only": True,
         "armorIQ_enforcement": False,
+        "profile": profile,
+        "profiles": {
+            name: sorted(permission_profile_tools(name))
+            for name in PERMISSION_PROFILES
+        },
         "scenarios": [asdict(scenario) for scenario in scenarios],
     }
 
@@ -38,6 +47,31 @@ class GauntletHandler(SimpleHTTPRequestHandler):
             return
 
         body = json.dumps(build_simulation_payload()).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self) -> None:
+        if urlsplit(self.path).path != "/api/simulate":
+            self.send_error(404)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            request = json.loads(self.rfile.read(length) or b"{}")
+            if not isinstance(request, dict):
+                raise ValueError("Request body must be a JSON object.")
+            profile = request.get("profile", "read_only")
+            if not isinstance(profile, str) or profile not in PERMISSION_PROFILES:
+                self.send_error(400, "Unknown permission profile")
+                return
+            payload = build_simulation_payload(profile)
+        except (ValueError, json.JSONDecodeError) as exc:
+            self.send_error(400, str(exc))
+            return
+        body = json.dumps(payload).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
